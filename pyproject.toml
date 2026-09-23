@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yandex-music-downloader"
-version = "3.5.5"
+version = "4.0.0"
 description = "Загрузчик музыки с сервиса Яндекс.Музыка"
 requires-python = ">=3.9"
 readme = "README.md"
@@ -17,6 +17,11 @@ dependencies = [
     "StrEnum",
     "pycryptodome"
 ]
+
+[project.optional-dependencies]
+gui = ["PyQt5"]
+web = ["Flask"]
+all = ["PyQt5", "Flask"]
 
 [project.scripts]
 yandex-music-downloader = "ymd.cli:main"

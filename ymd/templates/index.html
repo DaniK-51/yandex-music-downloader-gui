@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Яндекс Музыка — Загрузчик</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #2b2b2b; color: #ccc; min-height: 100vh; font-size: 13px; }
+  .container { max-width: 580px; margin: 0 auto; padding: 12px; }
+
+  h1 { text-align: center; margin-bottom: 10px; font-size: 16px; font-weight: 500; color: #bbb; }
+
+  .profile-bar { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .profile-bar select { flex: 1; }
+
+  label { display: block; font-size: 12px; color: #999; margin-bottom: 2px; }
+  input[type="text"], input[type="password"], select, textarea {
+    width: 100%; padding: 5px 8px; background: #383838; border: 1px solid #444;
+    border-radius: 3px; color: #ccc; font-size: 13px; margin-bottom: 6px;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: #777; }
+  textarea { resize: vertical; min-height: 40px; font-family: monospace; font-size: 12px; }
+
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+  .row > * { flex: 1; }
+  .row > label { flex: 0 0 auto; margin-bottom: 0; }
+
+  .section { background: #333; border-radius: 4px; padding: 8px 10px; margin-bottom: 6px; }
+  .section h2 { font-size: 11px; text-transform: uppercase; color: #777; margin-bottom: 6px; letter-spacing: 0.5px; }
+
+  .btn-row { display: flex; gap: 6px; margin-bottom: 6px; }
+  button { padding: 6px 14px; border: none; border-radius: 3px; font-size: 13px;
+           cursor: pointer; font-weight: 500; transition: background 0.15s; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-download { background: #5a7a5a; color: #ddd; flex: 2; padding: 8px; }
+  .btn-download:hover:not(:disabled) { background: #6a8a6a; }
+  .btn-pause { background: #7a7a5a; color: #ddd; }
+  .btn-pause:hover:not(:disabled) { background: #8a8a6a; }
+  .btn-stop { background: #7a5a5a; color: #ddd; }
+  .btn-stop:hover:not(:disabled) { background: #8a6a6a; }
+  .btn-sm { padding: 5px 10px; font-size: 11px; background: #3e3e3e; color: #aaa; }
+  .btn-sm:hover { background: #4a4a4a; }
+
+  a.btn-sm { text-decoration: none; display: inline-block; }
+
+  .quality-group { display: flex; gap: 14px; margin-bottom: 4px; }
+  .quality-group label { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px; color: #aaa; }
+  .quality-group input[type="radio"] { accent-color: #888; }
+
+  .checkbox-row { display: flex; gap: 16px; margin-bottom: 4px; }
+  .checkbox-row label { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px; color: #aaa; }
+  .checkbox-row input[type="checkbox"] { accent-color: #888; }
+
+  .progress-container { background: #383838; border-radius: 3px; height: 16px; margin-bottom: 4px; overflow: hidden; }
+  .progress-bar { background: #6a7a6a; height: 100%;
+                  width: 0%; transition: width 0.3s; text-align: center; line-height: 16px;
+                  font-size: 11px; color: #ccc; }
+
+  .log { background: #262626; border-radius: 3px; padding: 6px 8px; max-height: 180px;
+         overflow-y: auto; font-family: monospace; font-size: 11px; line-height: 1.5; color: #999; }
+  .log .error { color: #c07070; }
+  .log .done { color: #70a070; }
+  .log .skipped { color: #b0a060; }
+
+  .status-bar { display: flex; justify-content: space-between; font-size: 11px; color: #777; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Яндекс Музыка — Загрузчик</h1>
+
+  <div class="profile-bar">
+    <label style="flex:0 0 auto">Профиль:</label>
+    <select id="profileSelect">
+      {% for name in profiles %}
+      <option value="{{ name }}" {% if name == active_profile.name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn-sm" onclick="saveCurrentProfile()">Сохранить</button>
+    <button class="btn-sm" onclick="deleteProfile()">Удалить</button>
+  </div>
+
+  <div class="section">
+    <h2>Параметры</h2>
+    <label for="url">URL (по одному на строку):</label>
+    <textarea id="url" placeholder="https://music.yandex.ru/artist/...&#10;https://music.yandex.ru/album/..."></textarea>
+
+    <div class="row">
+      <div style="flex:3"><label for="token">Токен:</label>
+      <input type="text" id="token" value="{{ active_profile.token }}"></div>
+      <div style="flex:0 0 auto; align-self:flex-end"><a class="btn-sm" href="https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d" target="_blank">Получить токен</a></div>
+    </div>
+
+    <div class="row">
+      <div><label for="outputDir">Папка:</label>
+      <input type="text" id="outputDir" value="{{ active_profile.output_dir }}"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Настройки</h2>
+    <div class="quality-group">
+      <label><input type="radio" name="quality" value="0" {% if active_profile.quality == 0 %}checked{% endif %}> AAC 64</label>
+      <label><input type="radio" name="quality" value="1" {% if active_profile.quality == 1 %}checked{% endif %}> AAC 192</label>
+      <label><input type="radio" name="quality" value="2" {% if active_profile.quality == 2 %}checked{% endif %}> FLAC</label>
+    </div>
+
+    <div class="checkbox-row">
+      <label><input type="checkbox" id="embedCover" {% if active_profile.embed_cover %}checked{% endif %}> Обложка</label>
+      <label><input type="checkbox" id="skipExisting" {% if active_profile.skip_existing %}checked{% endif %}> Пропускать существующие</label>
+    </div>
+
+    <div class="row">
+      <div><label for="lyricsFormat">Текст:</label>
+      <select id="lyricsFormat">
+        <option value="none" {% if active_profile.lyrics_format == 'none' %}selected{% endif %}>Нет</option>
+        <option value="text" {% if active_profile.lyrics_format == 'text' %}selected{% endif %}>TEXT</option>
+        <option value="lrc" {% if active_profile.lyrics_format == 'lrc' %}selected{% endif %}>LRC</option>
+      </select></div>
+      <div><label for="delay">Задержка (с):</label>
+      <input type="text" id="delay" value="{{ active_profile.delay }}"></div>
+    </div>
+
+    <label for="pathPattern">Шаблон пути:</label>
+    <input type="text" id="pathPattern" value="{{ active_profile.path_pattern }}">
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-download" id="btnDownload" onclick="startDownload()">СКАЧАТЬ</button>
+    <button class="btn-pause" id="btnPause" onclick="togglePause()" disabled>Пауза</button>
+    <button class="btn-stop" id="btnStop" onclick="stopDownload()" disabled>Стоп</button>
+  </div>
+
+  <div class="section">
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="progress-container">
+    <div class="progress-bar" id="progressBar">0%</div>
+  </div>
+
+  <div class="status-bar">
+    <span id="statusText">Готово</span>
+    <span id="errorCount">Ошибок: 0</span>
+    <span id="queueInfo"></span>
+  </div>
+</div>
+
+<script>
+let currentJobId = null;
+let eventSource = null;
+
+function getFormData() {
+  const quality = document.querySelector('input[name="quality"]:checked').value;
+  return {
+    urls: document.getElementById('url').value.split('\n').map(u => u.trim()).filter(u => u),
+    token: document.getElementById('token').value,
+    output_dir: document.getElementById('outputDir').value,
+    quality: parseInt(quality),
+    embed_cover: document.getElementById('embedCover').checked,
+    skip_existing: document.getElementById('skipExisting').checked,
+    lyrics_format: document.getElementById('lyricsFormat').value,
+    delay: parseInt(document.getElementById('delay').value) || 0,
+    path_pattern: document.getElementById('pathPattern').value,
+  };
+}
+
+async function startDownload() {
+  const data = getFormData();
+  if (!data.urls.length) { alert('Введите URL'); return; }
+  if (!data.token) { alert('Введите токен'); return; }
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('progressBar').style.width = '0%';
+  document.getElementById('progressBar').textContent = '0%';
+  const resp = await fetch('/api/download', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  });
+  const result = await resp.json();
+  if (result.error) { alert(result.error); return; }
+  currentJobId = result.job_id;
+  setUIState('downloading');
+  listenProgress(currentJobId);
+}
+
+function listenProgress(jobId) {
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource(`/api/progress/${jobId}`);
+  eventSource.onmessage = function(e) {
+    const p = JSON.parse(e.data);
+    if (p.status === 'finished') { setUIState('idle'); document.getElementById('statusText').textContent = 'Готово'; eventSource.close(); return; }
+    updateProgress(p);
+  };
+  eventSource.onerror = function() { setUIState('idle'); eventSource.close(); };
+}
+
+function updateProgress(p) {
+  const log = document.getElementById('log');
+  const prefix = p.total ? `[${p.current}/${p.total}] ` : '';
+  const codec = p.codec ? `[${p.codec}${p.bitrate > 0 ? ' '+p.bitrate+'kbps' : ''}] ` : '';
+  let cls = '', text = '';
+  if (p.status === 'downloading') { text = `${prefix}${codec}Загрузка ${p.file_path}`; }
+  else if (p.status === 'done') { text = `${prefix}${codec}OK ${p.file_path}`; cls = 'done'; }
+  else if (p.status === 'skipped') { text = `${prefix}Пропущен ${p.file_path}`; cls = 'skipped'; }
+  else if (p.status === 'error') { text = p.track_title ? `${prefix}Ошибка: ${p.track_artist} - ${p.track_title}` : `${prefix}Ошибка: ${p.file_path}`; cls = 'error'; }
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = text;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+  if (p.total) {
+    const pct = Math.round(p.current / p.total * 100);
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressBar').textContent = `${p.current}/${p.total} (${pct}%)`;
+  }
+  document.getElementById('errorCount').textContent = `Ошибок: ${p.errors}`;
+  document.getElementById('queueInfo').textContent = p.queue_remaining > 0 ? `Очередь: ${p.queue_remaining}` : '';
+}
+
+function setUIState(state) {
+  const dl = document.getElementById('btnDownload'), pause = document.getElementById('btnPause'), stop = document.getElementById('btnStop');
+  if (state === 'downloading') { dl.disabled = true; pause.disabled = false; stop.disabled = false; document.getElementById('statusText').textContent = 'Загрузка...'; }
+  else { dl.disabled = false; pause.disabled = true; stop.disabled = true; pause.textContent = 'Пауза'; }
+}
+
+async function togglePause() {
+  if (!currentJobId) return;
+  const pause = document.getElementById('btnPause');
+  if (pause.textContent === 'Пауза') { await fetch(`/api/pause/${currentJobId}`, {method: 'POST'}); pause.textContent = 'Продолжить'; document.getElementById('statusText').textContent = 'Пауза'; }
+  else { await fetch(`/api/resume/${currentJobId}`, {method: 'POST'}); pause.textContent = 'Пауза'; document.getElementById('statusText').textContent = 'Загрузка...'; }
+}
+
+async function stopDownload() {
+  if (!currentJobId) return;
+  await fetch(`/api/stop/${currentJobId}`, {method: 'POST'});
+  document.getElementById('statusText').textContent = 'Остановка...';
+}
+
+async function saveCurrentProfile() {
+  const name = document.getElementById('profileSelect').value;
+  const data = getFormData();
+  const profile = { name: name, token: data.token, output_dir: data.output_dir, quality: data.quality, lyrics_format: data.lyrics_format, embed_cover: data.embed_cover, skip_existing: data.skip_existing, path_pattern: data.path_pattern, delay: data.delay };
+  await fetch('/api/profiles', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(profile) });
+}
+
+async function deleteProfile() {
+  const sel = document.getElementById('profileSelect'), name = sel.value;
+  if (name === 'default') { alert('Профиль default нельзя удалить'); return; }
+  await fetch(`/api/profiles/${name}`, {method: 'DELETE'});
+  sel.remove(sel.selectedIndex);
+}
+
+document.getElementById('profileSelect').addEventListener('change', async function() {
+  const name = this.value;
+  const resp = await fetch(`/api/profiles/${name}`);
+  const p = await resp.json();
+  document.getElementById('token').value = p.token || '';
+  document.getElementById('outputDir').value = p.output_dir || '.';
+  document.getElementById('pathPattern').value = p.path_pattern || '';
+  document.getElementById('embedCover').checked = p.embed_cover;
+  document.getElementById('skipExisting').checked = p.skip_existing;
+  document.getElementById('lyricsFormat').value = p.lyrics_format || 'none';
+  document.getElementById('delay').value = p.delay || 0;
+  document.querySelector(`input[name="quality"][value="${p.quality}"]`).checked = true;
+  await fetch('/api/profiles/active', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name}) });
+});
+</script>
+</body>
+</html>
